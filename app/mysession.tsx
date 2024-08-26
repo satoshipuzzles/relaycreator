@@ -110,12 +110,12 @@ export default function ShowSession() {
                     </form>
                 </dialog>
             )}
-            <div className="flex-1 font-condensed">
+            <div className="flex-1 font">
                 <a
                     href={rootDomain + "/"}
-                    className="normal-case lg:text-2xl text-lg"
+                    className="normal-case text-lg"
                 >
-                    RELAY.TOOLS
+                    nostrfreaks.com 
                 </a>
             </div>
 

@@ -2,6 +2,7 @@
 import { useSession } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
+import TextStringFreaks from '../components/textStringFreaks'
 
 export default function HelpfulInfo(props: React.PropsWithChildren<{}>) {
     const { data: session, status } = useSession();
@@ -28,32 +29,16 @@ export default function HelpfulInfo(props: React.PropsWithChildren<{}>) {
     }
 
     return (
-        <div className="font-condensed">
-            <h1 className="mt-8 text-2xl leading-tight lg:leading-normal lg:text-5xl text-primary text-center">The fastest and easiest way to launch new relays for nostr.</h1>
+        <div className="font-roboto">
+            <div className="flex items-center text-center justify-center">
+                <div className="text-2xl items-center mr-2">Find your</div>
+                <TextStringFreaks/>
+            </div>
             <div className="mt-8 flex flex-wrap gap-12">
-                <div className="bg-base-100 hidden flex-1 lg:flex-auto lg:block lg:w-1/4">
-                    <div className="">
-                        <h2 className="text-xl mb-2">What is Nostr?</h2>
-                        <p className="font-roboto">Nostr is a distributed social media protocol for the internet aimed at taking back control over our social media experience. Relays are an important part of the nostr ecosystem.</p>
-                    </div>
-                </div>
-                <div className="bg-base-100 flex-1 lg:flex-auto hidden lg:block lg:w-1/4">
-                    <div className="">
-                        <h2 className="font text-xl mb-2">Discover, Create, Join</h2>
-                        <p className="font-roboto">
-                            You can discover new relays to connect to.
-                            You can create new relays. You can join a relay as a paid member or a moderator.
-                        </p>
-                    </div>
-                </div>
                 <div className="bg-base-100 flex-1 lg:flex-auto lg:w-1/4 text-center lg:text-left">
                     <div className="">
-                        <h2 className="text-xl mb-2">Relay Creator</h2>
                         <div className="font-roboto">
-                            <p>Create relays of any type quickly and easily</p>
-                            <p>Pricing: 12,000 sats/month</p>
-                            <p className="">open source on <a className="link" href="https://github.com/relaytools">github</a></p>
-                            
+                            <p>Join and start topical relays TREX™. Assemble your crew.</p>
                         </div>
                     </div>
                 </div>
@@ -61,7 +46,7 @@ export default function HelpfulInfo(props: React.PropsWithChildren<{}>) {
             <div className="mt-4 flex lg:justify-end justify-center">
                 <a href={`/signup`} className="btn uppercase btn-primary rounded-lg"
                 >
-                    <Image src="buttonStart.svg" className="rounded-lg" alt="Start a Relay" width={200} height={50} />
+                    Start a relay
                 </a>
             </div>
         </div >
