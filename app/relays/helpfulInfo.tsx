@@ -35,7 +35,7 @@ export default function HelpfulInfo(props: React.PropsWithChildren<{}>) {
                 <TextStringFreaks/>
             </div>
             <div className="mt-8 flex flex-wrap gap-12">
-                <div className="bg-base-100 flex-1 lg:flex-auto lg:w-1/4 text-center lg:text-left">
+                <div className="bg-base-100 flex-1 lg:flex-auto lg:w-1/4 text-center">
                     <div className="">
                         <div className="font-roboto">
                             <p>Join and start topical relays TREX™. Assemble your crew.</p>
@@ -43,11 +43,14 @@ export default function HelpfulInfo(props: React.PropsWithChildren<{}>) {
                     </div>
                 </div>
             </div>
-            <div className="mt-4 flex lg:justify-end justify-center">
-                <a href={`/signup`} className="btn uppercase btn-primary rounded-lg"
+            <div className="mt-4 flex justify-center">
+                <a href={`/signup`} className="btn uppercase btn-primary mb-4"
                 >
                     Start a relay
                 </a>
+            </div>
+            <div className="flex justify-center">
+                <a className="btn btn-primary" href="/hivetalk">hivetalk</a>
             </div>
         </div >
     )

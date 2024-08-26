@@ -14,6 +14,9 @@ module.exports = {
         '2xl': '1536px',
       },
     extend: {
+      colors: {
+        customColor: "#EB4DFF"
+      },
       fontFamily: {
         jetbrains: ["var(--font-jetbrains)"],
         sans: ["var(--font-open-sans)"],

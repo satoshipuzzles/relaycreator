@@ -16,7 +16,7 @@ const TextStringFreaks: React.FC = () => {
         };
     }, [items.length]);
 
-    return <div className="text-2xl text-accent font-bold items-center">{items[currentIndex]}</div>;
+    return <div className="text-2xl text-customColor font-bold items-center">{items[currentIndex]}</div>;
 };
 
 export default TextStringFreaks;
