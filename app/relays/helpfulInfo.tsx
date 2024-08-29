@@ -1,47 +1,85 @@
 "use client"
-import { useSession } from 'next-auth/react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import Image from 'next/image';
-import TextStringFreaks from '../components/textStringFreaks'
+import { nip19 } from "nostr-tools"
+import { ModWithRelays, RelayWithEverything } from "../components/relayWithEverything"
+import { useState, useEffect } from "react"
+import Relay from "../components/relay"
+import PublicRelays from "./publicRelays"
+import { useSearchParams } from "next/navigation";
 
-export default function HelpfulInfo(props: React.PropsWithChildren<{}>) {
-    const { data: session, status } = useSession();
-    const p = useSearchParams();
-    if (p == null) {
-        return (
-            <>
-                no p
-            </>
-        )
+export default function MyRelays(
+    props: React.PropsWithChildren<{
+        myRelays: RelayWithEverything[];
+        moderatedRelays: ModWithRelays[];
+        publicRelays: RelayWithEverything[];
+    }>) {
+
+    const [showMyRelays, setShowMyRelays] = useState(false)
+
+    const searchParams = useSearchParams();
+    const myRelays = searchParams?.get("myrelays")
+
+    useEffect(() => {
+        if (myRelays == "true") {
+            setShowMyRelays(true)
+        } else {
+            setShowMyRelays(false)
+        }
+    }
+    , [myRelays])
+
+
+    const selectTypeRelays = () => {
+        if (showMyRelays) {
+            return (
+                <div>
+                    <input key="showpublicrelays1" className="join-item btn" onClick={() => setShowMyRelays(false)} type="radio" name="options" aria-label="Public Relays" />
+                    <input key="shomyrelays1" className="join-item btn btn-primary btn-active" onClick={() => setShowMyRelays(true)} type="radio" name="options" aria-label="My Relays" />
+                </div>
+            )
+        } else {
+            return (
+                <div>
+                    <input key="publicrelays1" className="join-item btn btn-primary btn-active" onClick={() => setShowMyRelays(false)} type="radio" name="options" aria-label="Public Relays" />
+                    <input key="myrelays1" className="join-item btn" onClick={() => setShowMyRelays(true)} type="radio" name="options" aria-label="My Relays" />
+                </div>
+            )
+        }
+
     }
 
-    const relayname = p.get('relayname');
-    let useName = ""
-    if (relayname) {
-        useName = relayname
-    }
-
-    const router = useRouter()
-
-    const handleCreateRelay = async (event: any) => {
-        event.preventDefault();
-
-    }
+    // find duplicated relays across myRelays vs. moderatedRelays
+    const myRelayIds = props.myRelays.map(relay => relay.id)
+    const moderatedRelayIds = props.moderatedRelays.map(relay => relay.relay.id)
+    const duplicatedRelays = myRelayIds.filter(id => moderatedRelayIds.includes(id))
 
     return (
-        <div className="font-roboto">
-            <div className="flex items-center text-center justify-center">
-                <div className="text-2xl items-center mr-2">Find your</div>
-                <TextStringFreaks/>
-            </div>
-            <div className="mt-8 flex flex-wrap gap-12">
-                <div className="bg-base-100 flex-1 lg:flex-auto lg:w-1/4 text-center">
-                    <div className="">
-                        <div className="font-roboto">
-                            <p>Join and start topical relays TREX™. Assemble your crew.</p>
+        <div>
+            <div className="mt-8 mb-8">
+                <div className="flex justify-center">
+                    {/*selectTypeRelays()*/}
+                </div>
+                {showMyRelays &&
+                    <div>
+                        <div className="mt-8 flex flex-wrap gap-12">
+                            {props.myRelays.map((relay) => (
+                                <Relay key={relay.id} relay={relay} showSettings={true} showEdit={false} showDetail={false} showExplorer={false} showCopy={false} />
+                            ))}
+
+                            {props.moderatedRelays.map((relay) => (
+                                // skip duplicated relays
+                                !duplicatedRelays.includes(relay.relay.id) &&
+                                <Relay key={relay.id} relay={relay.relay} showSettings={true} showEdit={false} showDetail={false} showExplorer={false} showCopy={false} />
+                            ))}
                         </div>
                     </div>
-                </div>
+                }
+                {
+                    !showMyRelays &&
+                    <PublicRelays relays={props.publicRelays} />
+                }
+
             </div>
+
+        </div >
     )
 }
