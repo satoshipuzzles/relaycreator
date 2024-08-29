@@ -34,20 +34,12 @@ export default function HelpfulInfo(props: React.PropsWithChildren<{}>) {
                 <div className="text-2xl items-center mr-2">Find your</div>
                 <TextStringFreaks />
             </div>
-            <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                <div className="bg-base-100 p-4 rounded-lg text-center">
-                    <div className="font-roboto">
-                        <p>Join and start topical relays TREX™. Assemble your crew.</p>
-                    </div>
-                </div>
-                <div className="bg-base-100 p-4 rounded-lg text-center">
-                    <div className="font-roboto">
-                        <p>Relay Container 2</p>
-                    </div>
-                </div>
-                <div className="bg-base-100 p-4 rounded-lg text-center">
-                    <div className="font-roboto">
-                        <p>Relay Container 3</p>
+            <div className="mt-8 flex flex-wrap gap-12">
+                <div className="bg-base-100 flex-1 lg:flex-auto lg:w-1/4 text-center">
+                    <div className="">
+                        <div className="font-roboto">
+                            <p>Join and start topical relays TREX™. Assemble your crew.</p>
+                        </div>
                     </div>
                 </div>
             </div>
