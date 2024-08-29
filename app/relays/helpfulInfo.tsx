@@ -1,4 +1,4 @@
-"use client"
+use client"
 import { useSession } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
@@ -43,5 +43,15 @@ export default function HelpfulInfo(props: React.PropsWithChildren<{}>) {
                     </div>
                 </div>
             </div>
+            <div className="mt-4 flex justify-center">
+                <a href={`/signup`} className="btn uppercase btn-primary mb-4"
+                >
+                    Start a relay
+                </a>
+            </div>
+            <div className="flex justify-center">
+                <a className="btn btn-primary" href="/hivetalk">hivetalk</a>
+            </div>
+        </div >
     )
 }
