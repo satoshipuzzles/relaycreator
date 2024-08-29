@@ -1,4 +1,4 @@
-"use client"
+"use client";
 import { useSession } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
@@ -32,7 +32,7 @@ export default function HelpfulInfo(props: React.PropsWithChildren<{}>) {
         <div className="font-roboto">
             <div className="flex items-center text-center justify-center">
                 <div className="text-2xl items-center mr-2">Find your</div>
-                <TextStringFreaks/>
+                <TextStringFreaks />
             </div>
             <div className="mt-8 flex flex-wrap gap-12">
                 <div className="bg-base-100 flex-1 lg:flex-auto lg:w-1/4 text-center">
@@ -43,15 +43,6 @@ export default function HelpfulInfo(props: React.PropsWithChildren<{}>) {
                     </div>
                 </div>
             </div>
-            <div className="mt-4 flex justify-center">
-                <a href={`/signup`} className="btn uppercase btn-primary mb-4"
-                >
-                    Start a relay
-                </a>
-            </div>
-            <div className="flex justify-center">
-                <a className="btn btn-primary" href="/hivetalk">hivetalk</a>
-            </div>
-        </div >
+        </div>
     )
 }
