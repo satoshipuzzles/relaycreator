@@ -403,7 +403,9 @@ export default function PostsPage(
         }
         const substrings = [
             {
-                regex: "nostr:(npub[a-z0-9]+)",
+                // full BECH32 regex for reference
+                //regex: /[\x21-\x7E]{1,83}1[023456789acdefghjklmnpqrstuvwxyz]{6,}/,
+                regex: "nostr:(npub1[023456789acdefghjklmnpqrstuvwxyz]{6,})",
                 replace: (match: string, p1: string) => {
                     var usePub: any;
                     var prettyName: string;
@@ -421,21 +423,21 @@ export default function PostsPage(
                 },
             },
             {
-                regex: "(nostr:nevent[a-z,0-9]+)",
+                regex: "(nostr:nevent1[023456789acdefghjklmnpqrstuvwxyz]{6,})",
                 replace: () => ({
                     content: "<nevent>",
                     className: "font-condensed",
                 }),
             },
             {
-                regex: "(nostr:nprofile[a-z,0-9]+)",
+                regex: "(nostr:nprofile1[023456789acdefghjklmnpqrstuvwxyz]{6,})",
                 replace: () => ({
                     content: "<nprofile>",
                     className: "font-condensed",
                 }),
             },
             {
-                regex: "(nostr:note[a-z,0-9]+)",
+                regex: "(nostr:note1[023456789acdefghjklmnpqrstuvwxyz]{6,})",
                 replace: () => ({
                     content: "<note1>",
                     className: "font-condensed",
@@ -452,20 +454,6 @@ export default function PostsPage(
                 regex: "(https?://[^\\s,^\\n]+)",
                 replace: () => ({
                     content: "<link>",
-                    className: "link link-secondary",
-                }),
-            },
-            {
-                regex: "lnbc[a-z,0-9]+",
-                replace: () => ({
-                    content: "<invoice>",
-                    className: "link link-secondary",
-                }),
-            },
-            {
-                regex: "bc1[a-z,0-9]+",
-                replace: () => ({
-                    content: "<btcaddr>",
                     className: "link link-secondary",
                 }),
             },
@@ -707,7 +695,8 @@ export default function PostsPage(
     };
 
     // todo, delete from view
-    const handleDeleteEvent = async () => {
+    const handleDeleteEvent = async (e: any) => {
+        e.preventDefault();
         if (showPost != undefined) {
             const dEvent = new NDKEvent(ndk);
             dEvent.kind = 7;
@@ -720,7 +709,8 @@ export default function PostsPage(
         }
     };
 
-    const handleBlockPubkey = async () => {
+    const handleBlockPubkey = async (e: any) => {
+        e.preventDefault();
         if (showPost != undefined) {
             // call to API to add new keyword
             const response = await fetch(
@@ -741,7 +731,8 @@ export default function PostsPage(
         }
     };
 
-    const handleBlockAndDelete = async () => {
+    const handleBlockAndDelete = async (e: any) => {
+        e.preventDefault();
         // delete part
         if (showPost != undefined) {
             // deleting phase
@@ -752,7 +743,7 @@ export default function PostsPage(
             await dEvent.publish();
 
             // blocking phase
-            handleBlockPubkey();
+            handleBlockPubkey(e);
             // remove from UI
             removePostPubkey(showPost);
             //clear the form
@@ -760,7 +751,8 @@ export default function PostsPage(
         }
     };
 
-    const handleClosePost = async () => {
+    const handleClosePost = async (e: any) => {
+        e.preventDefault();
         setShowPost(undefined);
         setReplyPost("");
         setShowImages(false);
@@ -1056,7 +1048,7 @@ export default function PostsPage(
                             value={postContent}
                             rows={1}
                         />
-                        <button className="btn uppercase btn-primary justify-end">
+                        <button disabled={postContent == ""} className="btn uppercase btn-primary justify-end">
                             Post
                         </button>
                         {!showKindPicker && (
@@ -1107,7 +1099,7 @@ export default function PostsPage(
                                 <div className="flex justify-end">
                                     <div
                                         className="btn uppercase"
-                                        onClick={() => handleClosePost()}
+                                        onClick={(e) => handleClosePost(e)}
                                     >
                                         X
                                     </div>
@@ -1205,6 +1197,7 @@ export default function PostsPage(
                                         <button
                                             className="btn uppercase btn-primary"
                                             onClick={(e) => handleReply(e)}
+                                            disabled={replyPost == ""}
                                         >
                                             reply
                                         </button>
@@ -1219,8 +1212,8 @@ export default function PostsPage(
                                         <div className="mb-4">
                                             <button
                                                 className="btn uppercase"
-                                                onClick={() =>
-                                                    handleDeleteEvent()
+                                                onClick={(e) =>
+                                                    handleDeleteEvent(e)
                                                 }
                                             >
                                                 delete event
@@ -1229,8 +1222,8 @@ export default function PostsPage(
                                         <div className="mb-4">
                                             <button
                                                 className="btn uppercase"
-                                                onClick={() =>
-                                                    handleBlockPubkey()
+                                                onClick={(e) =>
+                                                    handleBlockPubkey(e)
                                                 }
                                             >
                                                 block pubkey
@@ -1239,8 +1232,8 @@ export default function PostsPage(
                                         <div className="mb-4">
                                             <button
                                                 className="btn uppercase"
-                                                onClick={() =>
-                                                    handleBlockAndDelete()
+                                                onClick={(e) =>
+                                                    handleBlockAndDelete(e)
                                                 }
                                             >
                                                 block & delete pubkey
@@ -1252,7 +1245,7 @@ export default function PostsPage(
                                 <div className="flex justify-center">
                                     <div
                                         className="flex justify-end btn btn-primary uppercase"
-                                        onClick={() => handleClosePost()}
+                                        onClick={(e) => handleClosePost(e)}
                                     >
                                         next
                                     </div>
