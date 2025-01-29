@@ -9,12 +9,17 @@ export default function HiveTalkPage() {
             <span className="loading loading-spinner loading-sm"></span>
             <span className="loading loading-spinner loading-md"></span>
             <span className="loading loading-spinner loading-lg"></span>
+
             <div className="card bg-base-100 w-96 shadow-xl">
                 <figure>
-                    <img
-                        src="https://img.daisyui.com/images/stock/photo-1606107557195-0e29a4b5b4aa.webp"
-                        alt="Shoes"
-                    />
+                    {/* Replace the <img> tag with a <video> tag */}
+                    <video
+                        src="/Fire.MOV" // replace with your video URL or local path
+                        className="w-full h-auto"
+                        controls
+                    >
+                        Your browser does not support the video tag.
+                    </video>
                 </figure>
                 <div className="card-body">
                     <h2 className="card-title">Shoes!</h2>
