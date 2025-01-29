@@ -14,7 +14,7 @@ export default function HiveTalkPage() {
                 <figure>
                     {/* Replace the <img> tag with a <video> tag */}
                     <video
-                        src="/Fire.MOV" // replace with your video URL or local path
+                        src="nostrfreaks.com/Fire.MOV" // replace with your video URL or local path
                         className="w-full h-auto"
                         controls
                     >
