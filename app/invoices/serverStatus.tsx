@@ -152,8 +152,8 @@ export default async function ServerStatus(
 
             return (
                 <div>
-                    { isAdmin && <AdminInvoices IsAdmin={isAdmin} RelayBalances={relayBalances} /> }
-                    { !isAdmin && <Balances IsAdmin={isAdmin} RelayBalances={relayBalances} /> }
+                    { isAdmin && <AdminInvoices RelayPaymentAmount={paymentAmount} IsAdmin={isAdmin} RelayBalances={relayBalances} /> }
+                    { !isAdmin && <Balances RelayPaymentAmount={paymentAmount} IsAdmin={isAdmin} RelayBalances={relayBalances} /> }
                 </div>
             );
         }

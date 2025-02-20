@@ -15,17 +15,31 @@ import NDK, {
     NDKAuthPolicy,
     NDKRelaySet,
     NDKSubscription,
+    NDKPublishError,
 } from "@nostr-dev-kit/ndk";
 
-import { useSearchParams } from "next/navigation";
 import { RelayWithEverything } from "../components/relayWithEverything";
 import RelayMenuBar from "../relays/relayMenuBar";
-import RelayDetail from "../components/relayDetail";
 import RelayPayment from "../components/relayPayment";
 import Terms from "../components/terms";
 import Image from "next/image";
 import ShowSmallSession from "../smallsession";
 import React from "react";
+import {
+    LineChart,
+    Line,
+    XAxis,
+    YAxis,
+    CartesianGrid,
+    Tooltip,
+    Legend,
+    ResponsiveContainer,
+    BarChart,
+    Bar,
+} from "recharts";
+
+import { useSearchParams } from "next/navigation";
+import { ToastContainer, toast } from "react-toastify";
 
 interface Event {
     pubkey: string;
@@ -67,9 +81,7 @@ function copyToClipboard(e: any, bolt: string) {
 
 export default function PostsPage(
     props: React.PropsWithChildren<{
-        relay: RelayWithEverything;
-        publicRelays: RelayWithEverything[];
-        stats: any;
+        relayName: string;
     }>
 ) {
     const { data: session, status } = useSession();
@@ -82,23 +94,228 @@ export default function PostsPage(
     const [myPubkey, setMyPubkey] = useState("");
     const [modActions, setModActions] = useState(false);
     const [showKind, setShowKind] = useState("1");
-    const [showKindPicker, setShowKindPicker] = useState(false);
+    const [showStats, setShowStats] = useState(false);
     const [anonPost, setAnonPost] = useState(false);
     const [postContent, setPostContent] = useState("");
+    const [graphStats, setGraphStats] = useState([]);
+    const [connStats, setConnStats] = useState([]);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const textareaReplyRef = useRef<HTMLTextAreaElement>(null);
     const postFormRef = useRef<HTMLFormElement>(null);
     const replyFormRef = useRef<HTMLFormElement>(null);
+    const replyTextAreaRef = useRef<HTMLTextAreaElement>(null);
+    const [kindFilter, setKindFilter] = useState("");
+    const [isAllowedStats, setIsAllowedStats] = useState(true);
+    const [profileSearch, setProfileSearch] = useState("");
+    const [showProfileResults, setShowProfileResults] = useState(false);
+    const [profileResults, setProfileResults] = useState<Profile[]>([]);
 
     const relayLimit = 100;
+    const transformToMultiSeriesData = (influxData: any) => {
+        // Group data by kind
+        const groupedByKind = influxData.reduce((acc: any, point: any) => {
+            const series = acc[point.kind] || [];
+            series.push({
+                time: new Date(point._time).getTime(),
+                value: point._value,
+            });
+            acc[point.kind] = series;
+            return acc;
+        }, {});
+
+        // Convert to Recharts format
+        let returnMe = Object.entries(groupedByKind).map(([kind, data]) => ({
+            name: `Kind ${kind}`,
+            data: data,
+        }));
+
+        if (kindFilter != "") {
+            returnMe = returnMe.filter(
+                (item) => item.name == `Kind ${kindFilter}`
+            );
+        }
+
+        return returnMe;
+    };
+
+    const transformToKindsData = (influxData: any) => {
+        // Aggregate total events by kind
+        const kindTotals = influxData.reduce((acc: any, point: any) => {
+            acc[point.kind] = (acc[point.kind] || 0) + point._value;
+            return acc;
+        }, {});
+
+        // Convert to chart format
+        const returnMe = Object.entries(kindTotals)
+            .map(([kind, total]) => ({
+                kind: `Kind ${kind}`,
+                total: total,
+            }))
+            .sort((a, b) => (b.total as number) - (a.total as number)); // Sort by highest count}
+
+        return returnMe.filter(
+            (item) =>
+                kindFilter === "" ||
+                item.kind.toLowerCase() == kindFilter.toLowerCase()
+        );
+    };
+
+    const transformConnStats = (stats: any) => {
+        // Group by timestamp
+        const groupedByTime = stats.reduce((acc: any, stat: any) => {
+            const time = new Date(stat._time).getTime();
+            if (!acc[time]) {
+                acc[time] = { time, value: 0 };
+            }
+            acc[time].value += stat._value;
+            return acc;
+        }, {});
+
+        // Convert to array and sort by time
+        const transformed = Object.values(groupedByTime).sort(
+            (a: any, b: any) => a.time - b.time
+        );
+        return transformed;
+    };
+
+    interface RelayData {
+        relay: RelayWithEverything;
+        publicRelays: [];
+        // add other properties if needed
+    }
+
+    const [relayData, setRelayData] = useState<RelayData | null>(null);
+    const [useAuth, setUseAuth] = useState(false);
+    const [nrelaydata, setnrelaydata] = useState("");
+    const [relayIcon, setRelayIcon] = useState("/green-check.png");
+    const [relayDescription, setRelayDescription] = useState("");
+    const [relayPostingPolicy, setRelayPostingPolicy] = useState(null);
+    const [relayPaymentsUrl, setRelayPaymentsUrl] = useState(null);
+    const [relayName, setRelayName] = useState(null);
+
+    useEffect(() => {
+        const fetchRelayData = async () => {
+            if (props.relayName != null) {
+                const rtResponse = await fetch(
+                    `/api/relay/${props.relayName}/guiRelays`
+                );
+                if (rtResponse.ok) {
+                    const data = await rtResponse.json();
+                    setRelayData(data);
+                    setUseAuth(data.relay.auth_required);
+                    console.log("auth information:" + data.relay.auth_required);
+                    var normalize_url: string;
+                    if (data.relay.is_external) {
+                        normalize_url = "wss://" + data.relay.domain + "/";
+                    } else {
+                        normalize_url =
+                            "wss://" +
+                            data.relay.name +
+                            "." +
+                            data.relay.domain +
+                            "/";
+                    }
+                    normalize_url = normalize_url.toLowerCase();
+                    setnrelaydata(normalize_url);
+                    setRelayIcon(data.relay.banner_image);
+                    console.log("relay icon", data.relay.banner_image);
+                }
+            } else if (relayUrl != null) {
+                const httpUrl = relayUrl
+                    .replace("wss://", "https://")
+                    .replace("ws://", "http://");
+                let nip11Response: any;
+                try {
+                nip11Response = await fetch(
+                    httpUrl, // + "/nostrjson",
+                    {
+                        headers: {
+                            Accept: "application/nostr+json",
+                        },
+                    }
+                    );
+                } catch (e) {
+                    console.log("nip11 fetch error" + e);
+                }
+
+                if (nip11Response && nip11Response.ok) {
+                    const data = await nip11Response.json();
+                    console.log(
+                        "USING AUTH DETECTED FROM NIP11",
+                        data.limitation?.auth_required
+                    );
+                    setUseAuth(data.limitation?.auth_required || false);
+                    let normalize_url = relayUrl;
+                    normalize_url = normalize_url.toLowerCase();
+                    if (!normalize_url.endsWith("/")) {
+                        setnrelaydata(normalize_url + "/");
+                    } else {
+                        setnrelaydata(normalize_url);
+                    }
+                    setRelayIcon(data.icon);
+                    setRelayDescription(data.description);
+                    setRelayPostingPolicy(data.posting_policy);
+                    setRelayPaymentsUrl(data.payments_url);
+                    setRelayName(data.name);
+                    console.log("relay icon", data.icon);
+                } else {
+                    let normalize_url = relayUrl;
+                    normalize_url = normalize_url.toLowerCase();
+                    if (!normalize_url.endsWith("/")) {
+                        setnrelaydata(normalize_url + "/");
+                    } else {
+                        setnrelaydata(normalize_url);
+                    }
+                    console.log("nip11 fetch failed for " + httpUrl);
+                }
+
+                setRelayData(null);
+            }
+
+            setHasAttemptedFetch(true);
+        };
+
+        fetchRelayData();
+    }, []);
+
+    useEffect(() => {
+        if (!relayData) return;
+        let extraQuery = "";
+        if (isAllowedStats === false) {
+            extraQuery = "?blocked=true";
+        }
+        fetch(
+            `${process.env.NEXT_PUBLIC_ROOT_DOMAIN}/api/relay-stats/${relayData?.relay?.id}/graph-24h${extraQuery}`
+        )
+            .then((res) => res.json())
+            .then((data) => {
+                setGraphStats(data.stats);
+            });
+    }, [relayData, isAllowedStats]);
+
+    useEffect(() => {
+        if (!relayData) return;
+        fetch(
+            `${process.env.NEXT_PUBLIC_ROOT_DOMAIN}/api/relay-stats/${relayData?.relay?.name}/connections`
+        )
+            .then((res) => res.json())
+            .then((data) => {
+                setConnStats(data.stats);
+            });
+    }, [relayData]);
 
     async function grabNewKinds(newKind: string) {
+        ndk.subManager.subscriptions.forEach((s) => {
+            s.stop();
+        });
+
         var kindOtherSub: NDKSubscription;
         const kindToInteger = parseInt(newKind);
         kindOtherSub = ndk.subscribe(
             { kinds: [kindToInteger], limit: relayLimit },
             { closeOnEose: false, groupable: false }
         );
+
         kindOtherSub.on("event", (event: NDKEvent) => {
             // do profile lookups on the fly
             /*
@@ -163,9 +380,7 @@ export default function PostsPage(
         });
     }
 
-    async function grabStuff(nrelaydata: string, auth: boolean = false) {
-        var kind1Sub: NDKSubscription;
-
+    async function grabStuff() {
         const nip07signer = new NDKNip07Signer();
         try {
             const activeUser = await nip07signer.blockUntilReady();
@@ -181,54 +396,48 @@ export default function PostsPage(
             addToStatus("relay is flapping: " + flapping.url);
         });
         ndkPool.on("relay:auth", (relay: NDKRelay, challenge: string) => {
-            addToStatus("auth: " + props.relay.name);
+            addToStatus("auth: " + nrelaydata);
         });
 
         ndkPool.on("relay:authed", (relay: NDKRelay) => {
-            let normalized_url = nrelaydata + "/";
-            normalized_url = normalized_url.toLowerCase();
-            if (relay.url == normalized_url) {
-                addToStatus("authed: " + props.relay.name);
+            console.log("authed event listener");
+            if (relay.url == nrelaydata) {
+                addToStatus("authenticated 🔓");
                 wipePosts();
                 eventListener(relay);
-                console.log("authing?");
+                console.log("authenticated");
             }
         });
 
         ndkPool.on("relay:disconnect", (relay: NDKRelay) => {
-            let normalized_url = nrelaydata + "/";
-            normalized_url = normalized_url.toLowerCase();
-            if (relay.url == normalized_url) {
-                if (kind1Sub != undefined) {
-                    kind1Sub.stop();
-                }
-                addToStatus("disconnected: " + props.relay.name);
+            if (relay.url == nrelaydata) {
+                ndk.subManager.subscriptions.forEach((s) => {
+                    s.stop();
+                });
+                addToStatus("disconnected");
             }
         });
 
         ndkPool.on("relay:connect", (relay: NDKRelay) => {
-            let normalized_url = nrelaydata + "/";
-            normalized_url = normalized_url.toLowerCase();
-            if (relay.url == normalized_url) {
-                addToStatus("connected: " + props.relay.name);
+            if (relay.url == nrelaydata) {
+                addToStatus("connected");
                 wipePosts();
-                if (!auth) {
+                if (!useAuth) {
+                    console.log("no auth detected, requesting events");
                     eventListener(relay);
                 } else if (signerFailed) {
-                    addToStatus("sign-in required: " + props.relay.name);
+                    addToStatus("sign-in required");
                 }
             }
         });
 
         ndkPool.on("relay:connecting", (relay: NDKRelay) => {
-            //addToStatus("connecting: " + relay.url);
+            //addToStatus("connecting: " + nrelaydata);
         });
 
         ndkPool.on("relay:authfail", (relay: NDKRelay) => {
-            let normalized_url = nrelaydata + "/";
-            normalized_url = normalized_url.toLowerCase();
-            if (relay.url == normalized_url) {
-                addToStatus("unauthorized: " + props.relay.name);
+            if (relay.url == nrelaydata) {
+                addToStatus("unauthorized");
             }
         });
 
@@ -238,6 +447,17 @@ export default function PostsPage(
             nrelaydata,
             NDKRelayAuthPolicies.signIn({ ndk }),
             true
+        );
+
+        ndk.on(
+            "event:publish-failed",
+            (event: NDKEvent, error: NDKPublishError, relays: any) => {
+                console.log("event publish failed", event, error);
+                console.log(
+                    "event publish failed to send to all relays:",
+                    relays
+                );
+            }
         );
     }
 
@@ -274,47 +494,32 @@ export default function PostsPage(
         setPosts(setNewPosts);
     };
 
-    const addProfile = (e: any) => {
-        const newProfileContent: ProfileContent = JSON.parse(e.content);
-        const newProfile: Profile = {
-            pubkey: e.pubkey,
-            content: newProfileContent,
-        };
-        setProfiles((prevProfiles) => [newProfile, ...prevProfiles]);
-    };
-
-    var nrelaydata: string;
-    var useAuth: boolean;
-
-    if (props.relay == null || props.relay.name == null) {
-        nrelaydata = "wss://nostr21.com";
-        useAuth = false;
-    } else if (props.relay.is_external) {
-        nrelaydata = "wss://" + props.relay.domain;
-        useAuth = props.relay.auth_required;
-    } else {
-        nrelaydata = "wss://" + props.relay.name + "." + props.relay.domain;
-        useAuth = props.relay.auth_required;
-    }
+    const relayParams = useSearchParams();
+    const relayUrl = relayParams?.get("relay");
 
     const activeUser = ndk.activeUser;
     const activePubkey = activeUser?.pubkey;
+
     if (activePubkey != null && activePubkey != myPubkey) {
         console.log("setting my pubkey", activePubkey);
         setMyPubkey(activePubkey);
         const isModOrOwner =
-            props.relay.moderators.some(
+            relayData?.relay?.moderators?.some(
                 (mod) => mod.user.pubkey == activePubkey
-            ) || props.relay.owner.pubkey == activePubkey;
+            ) || relayData?.relay?.owner?.pubkey == activePubkey;
         if (isModOrOwner && modActions == false) {
             setModActions(true);
         }
         console.log("setting mod status", isModOrOwner);
     }
 
+    const [hasAttemptedFetch, setHasAttemptedFetch] = useState(false);
+
     useEffect(() => {
-        grabStuff(nrelaydata, useAuth);
-    }, []);
+        if (!hasAttemptedFetch) return;
+        // build the url for nrelaydata
+        grabStuff();
+    }, [hasAttemptedFetch]);
 
     function summarizePubkey(pubkey: string): string {
         if (pubkey == null) {
@@ -632,7 +837,7 @@ export default function PostsPage(
                 </div>
             );
         } else {
-            return(<></>);
+            return <></>;
         }
     };
 
@@ -672,36 +877,83 @@ export default function PostsPage(
                         tags: [
                             ["p", showPost.pubkey],
                             ["e", showPost.id],
+                            ["-"],
                         ],
                         created_at: Math.floor(Date.now() / 1000),
                     },
                     newSK
                 );
+                toast.info("Publishing reply...");
                 const newEvent = new NDKEvent(ndk, event);
-                await newEvent.publish();
+                const publishedTo = await newEvent.publish();
+                console.log("event was published to: ", publishedTo);
+                if (publishedTo.size == 0) {
+                    toast.error("Failed to publish reply");
+                } else {
+                    toast.success(
+                        "Reply published to " + publishedTo.size + " relays"
+                    );
+                    setShowPost(undefined);
+                    setReplyPost("");
+                }
             } else {
+                toast.info("Publishing reply...");
                 const newEvent = new NDKEvent(ndk);
                 newEvent.content = replyPost;
-                newEvent.kind = 1;
+                if(showPost.kind == 20) {
+                    newEvent.kind = 1111
+                } else {
+                    newEvent.kind = 1;
+                }
                 newEvent.tags = [
                     ["p", showPost.pubkey],
                     ["e", showPost.id],
+                    ["-"],
                 ];
-                await newEvent.publish();
+                const publishedTo = await newEvent.publish();
+                // const publishedTo = await newEvent.publish(newSet, 10000, howMany);
+                console.log("event was published to: ", publishedTo);
+                if (publishedTo.size == 0) {
+                    toast.error("Failed to publish reply");
+                } else {
+                    toast.success(
+                        "Reply published to " + publishedTo.size + " relays"
+                    );
+                    setShowPost(undefined);
+                    setReplyPost("");
+                }
             }
-            //clear the form
-            setShowPost(undefined);
-            setReplyPost("");
         }
     };
 
-    // todo, delete from view
+    const handleTextAreaFocus = () => {
+        if (replyTextAreaRef.current) {
+            setTimeout(() => {
+                replyTextAreaRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }, 100); // Small delay to ensure keyboard is up
+        }
+    };
+
+    useEffect(() => {
+        if (textareaRef.current) {
+            textareaRef.current.style.height = "auto";
+            textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
+        }
+    }, [postContent]);
+
+    useEffect(() => {
+        if (replyTextAreaRef.current) {
+            replyTextAreaRef.current.style.height = "auto";
+            replyTextAreaRef.current.style.height = `${replyTextAreaRef.current.scrollHeight}px`;
+        }
+    }, [replyPost]);
+
     const handleDeleteEvent = async (e: any) => {
         e.preventDefault();
         if (showPost != undefined) {
             const dEvent = new NDKEvent(ndk);
             dEvent.kind = 7;
-            dEvent.tags = [["e", showPost.id]];
+            dEvent.tags = [["e", showPost.id], ["-"]];
             dEvent.content = "❌";
             await dEvent.publish();
             removePost(showPost);
@@ -712,10 +964,10 @@ export default function PostsPage(
 
     const handleBlockPubkey = async (e: any) => {
         e.preventDefault();
-        if (showPost != undefined) {
+        if (showPost != undefined && relayData != null) {
             // call to API to add new keyword
             const response = await fetch(
-                `/api/relay/${props.relay.id}/blocklistpubkey`,
+                `/api/relay/${relayData.relay.id}/blocklistpubkey`,
                 {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -739,7 +991,7 @@ export default function PostsPage(
             // deleting phase
             const dEvent = new NDKEvent(ndk);
             dEvent.kind = 7;
-            dEvent.tags = [["p", showPost.pubkey]];
+            dEvent.tags = [["p", showPost.pubkey], ["-"]];
             dEvent.content = "🔨";
             await dEvent.publish();
 
@@ -759,6 +1011,58 @@ export default function PostsPage(
         setShowImages(false);
     };
 
+    function addProfile(profile: Profile) {
+        const newProfileContent: ProfileContent = JSON.parse(profile.content);
+        const newProfile: Profile = {
+            pubkey: profile.pubkey,
+            content: newProfileContent,
+        };
+
+        // Check if profile already exists and only add if it's newer
+        const existingProfile = profiles.find(p => p.pubkey === newProfile.pubkey);
+        
+        if (!existingProfile) {
+            // Add the new profile
+            setProfiles((prevProfiles) => [newProfile, ...prevProfiles]);
+        }
+    }
+
+    function getUniqueProfiles() {
+        // Return deduplicated profiles array
+        return Array.from(new Map(profiles.map(profile => [profile.pubkey, profile])).values());
+    }
+
+    const handlePostContentChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+        const value = e.target.value;
+        setPostContent(value);
+
+        // Check if we just typed an @ symbol
+        if (value.endsWith("@")) {
+            setProfileSearch("");
+            setShowProfileResults(true);
+            return;
+        }
+
+        // Check if we're in profile search mode
+        const lastAtIndex = value.lastIndexOf("@");
+        if (lastAtIndex >= 0) {
+            const searchTerm = value.slice(lastAtIndex + 1);
+            setProfileSearch(searchTerm);
+            
+            // Use getUniqueProfiles() instead of direct profiles array
+            const results = getUniqueProfiles().filter(profile => {
+                const name = profile.content?.name?.toLowerCase() || "";
+                const term = searchTerm.toLowerCase();
+                return name.includes(term);
+            });
+            
+            setProfileResults(results);
+            setShowProfileResults(true);
+        } else {
+            setShowProfileResults(false);
+        }
+    };
+
     const handleSubmitPost = async (e: any) => {
         e.preventDefault();
 
@@ -774,29 +1078,47 @@ export default function PostsPage(
                 {
                     kind: 1,
                     created_at: Math.floor(Date.now() / 1000),
-                    tags: [],
+                    tags: [["-"]],
                     content: post,
                 },
                 newSK
             );
-
+            toast.info("Publishing note...");
             const newEvent = new NDKEvent(ndk, event);
-            await newEvent.publish();
+            const publishedTo = await newEvent.publish();
+            console.log("event was published to: ", publishedTo);
+            if (publishedTo.size == 0) {
+                toast.error("Failed to publish");
+            } else {
+                toast.success(
+                    "Note published to " + publishedTo.size + " relays"
+                );
+                form.elements[0].value = "";
+                setPostContent("");
+            }
         } else {
             const newEvent = new NDKEvent(ndk);
             newEvent.kind = 1;
             newEvent.content = post;
-            await newEvent.publish();
+            newEvent.tags = [["-"]];
+            toast.info("Publishing note...");
+            const publishedTo = await newEvent.publish();
+            console.log("event was published to: ", publishedTo);
+            if (publishedTo.size == 0) {
+                toast.error("Failed to publish");
+            } else {
+                toast.success(
+                    "Note published to " + publishedTo.size + " relays"
+                );
+                form.elements[0].value = "";
+                setPostContent("");
+            }
         }
-
-        //clear the form
-        form.elements[0].value = "";
-        setPostContent("");
     };
 
     const handleChangeKind = async (e: any) => {
         e.preventDefault();
-        setShowKindPicker(false);
+        setShowStats(false);
         setShowKind(e.target.value);
         wipePosts();
         await grabNewKinds(e.target.value);
@@ -815,21 +1137,6 @@ export default function PostsPage(
             return false;
         }
     };
-
-    // textarea effects: auto expand multi-line
-    useEffect(() => {
-        if (textareaRef.current) {
-            textareaRef.current.style.height = "auto";
-            textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
-        }
-    }, [postContent]);
-
-    useEffect(() => {
-        if (textareaReplyRef.current) {
-            textareaReplyRef.current.style.height = "auto";
-            textareaReplyRef.current.style.height = `${textareaReplyRef.current.scrollHeight}px`;
-        }
-    }, [replyPost]);
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
         if (e.key === "Enter" && e.shiftKey) {
@@ -851,24 +1158,32 @@ export default function PostsPage(
         }
     };
 
+    const getSrcImageFromPost = (post: Event) => {
+        const src = post.tags.find((tag: any) => tag[0] === "imeta")?.[1];
+        const removePrefix = src.replace("url ", "");
+        console.log("loading image src: ", removePrefix);
+        return removePrefix;
+    };
+
     // this should be clickable and bring up some kind of menu/modal/drawer
     const displayRelayStatus = () => {
         var lastStatus: string;
         lastStatus = relayStatus[relayStatus.length - 1];
         var statusColor = "text-sm font-condensed ml-auto badge badge-neutral";
         if (
-            lastStatus.includes("connected:") ||
-            lastStatus.includes("authed:")
+            lastStatus.includes("connected") ||
+            lastStatus.includes("authenticated")
         ) {
             statusColor = "text-sm font-condensed ml-auto badge badge-success";
         }
         if (
-            lastStatus.includes("disconnected:") ||
-            lastStatus.includes("unauthorized:") ||
+            lastStatus.includes("disconnected") ||
+            lastStatus.includes("unauthorized") ||
             lastStatus.includes("sign-in")
         ) {
             statusColor = "text-sm font-condensed ml-auto badge badge-warning";
         }
+
         return (
             <div className="drawer drawer-end justify-end">
                 <input
@@ -898,6 +1213,7 @@ export default function PostsPage(
                         </div>
                     </label>
                 </div>
+
                 <div className="drawer-side z-10">
                     <label
                         htmlFor="my-drawer-4"
@@ -908,22 +1224,31 @@ export default function PostsPage(
                         <div className="mb-4">
                             <img
                                 src={
-                                    props.relay.banner_image ||
+                                    relayData?.relay?.banner_image ||
+                                    relayIcon ||
                                     "/green-check.png"
                                 }
                             ></img>
                         </div>
-                        <div className="text text-lg p-4 font-condensed">
-                            {props.relay.details}
+
+                        <div className="text text-lg p-4 font-bold">
+                            {relayData?.relay?.name || relayName}
                         </div>
-                        {props.relay.allow_list != null &&
-                            !props.relay.default_message_policy && (
+
+                        <div className="text text-lg p-4 font-condensed">
+                            {relayData?.relay?.details || relayDescription}
+                        </div>
+                        {relayData?.relay?.allow_list != null &&
+                            !relayData?.relay?.default_message_policy && (
                                 <div
                                     key="allowedpubkeycount"
                                     className="font-condensed p-4"
                                 >
                                     Members:{" "}
-                                    {props.relay.allow_list.list_pubkeys.length}
+                                    {
+                                        relayData?.relay?.allow_list
+                                            ?.list_pubkeys?.length
+                                    }
                                 </div>
                             )}
                         <div className="mb-4">
@@ -934,9 +1259,23 @@ export default function PostsPage(
                                 copy url to clipboard
                             </button>
                         </div>
+                        {modActions && (
+                            <div className="mb-4">
+                                <a
+                                    href={
+                                        process.env.NEXT_PUBLIC_ROOT_DOMAIN +
+                                        "/curator?relay_id=" +
+                                        relayData?.relay?.id
+                                    }
+                                    className="btn uppercase btn-primary"
+                                >
+                                    open relay settings
+                                </a>
+                            </div>
+                        )}
                         <div className="flex flex-wrap items-center">
                             <div className="text-primary font-condensed text-lg font-bold">
-                                anonymous posting {anonPost ? "ON" : "OFF"}
+                                anonymous posting is {anonPost ? "ON" : "OFF"}
                             </div>
                             <label className="swap">
                                 {/* this hidden checkbox controls the state */}
@@ -969,14 +1308,42 @@ export default function PostsPage(
                             </label>
                         </div>
 
-                        {props.relay.payment_required && (
+                        {relayData?.relay?.payment_required && (
                             <RelayPayment
-                                relay={props.relay}
+                                relay={relayData?.relay}
                                 pubkey={myPubkey}
                             />
                         )}
-                        {/*<RelayDetail relay={props.relay} />*/}
-                        {<Terms />}
+                        {relayPaymentsUrl && (
+                            <div className="mb-4 text flex-col-1">
+                                <div className="text-lg">
+                                    This relay has signaled it has payments
+                                    enabled. ⚡
+                                </div>
+                                <a
+                                    href={relayPaymentsUrl}
+                                    className="link link-secondary"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                >
+                                    {relayPaymentsUrl}
+                                </a>
+                            </div>
+                        )}
+                        {/*<RelayDetail relay={relayData.relay} />*/}
+                        {relayData && <Terms />}
+                        {relayPostingPolicy && (
+                            <div className="mb-4">
+                                <a
+                                    href={relayPostingPolicy}
+                                    className="link link-secondary"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                >
+                                    {relayPostingPolicy}
+                                </a>
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
@@ -985,6 +1352,7 @@ export default function PostsPage(
 
     return (
         <div className="">
+            <ToastContainer />
             <div className="flex flex-wrap w-full fixed top-0 left-0 z-50 bg-base-100">
                 <div className="flex w-full items-center mb-4">
                     <div className="drawer w-32">
@@ -1008,12 +1376,7 @@ export default function PostsPage(
                                 </div>
                                 <div className="chat-image avatar">
                                     <div className="w-12 rounded-full">
-                                        <img
-                                            src={
-                                                props.relay.banner_image ||
-                                                "/green-check.png"
-                                            }
-                                        />
+                                        <img src={relayIcon} />
                                     </div>
                                 </div>
                             </label>
@@ -1025,63 +1388,254 @@ export default function PostsPage(
                                 className="drawer-overlay"
                             ></label>
                             <div className="menu bg-base-200 text-base-content min-h-full w-80">
-                                {/* Sidebar content here */}
-                                <RelayMenuBar relays={props.publicRelays} />
+                                <div>MENU</div>
+                                {relayData != null && (
+                                    <RelayMenuBar
+                                        relays={relayData.publicRelays}
+                                    />
+                                )}
                             </div>
                         </div>
                     </div>
                     {displayRelayStatus()}
                 </div>
 
-                <div className="w-full p-2">
+                <div className="w-full p-2 flex flex-wrap">
                     <form
                         ref={postFormRef}
                         onSubmit={(e) => handleSubmitPost(e)}
-                        className="flex flex-wrap w-full items-center justify-center"
+                        className="flex flex-wrap flex-grow items-center justify-center relative"
                     >
                         <textarea
                             ref={textareaRef}
                             key="post1"
                             placeholder="say something"
-                            className="flex-grow p-4 max-w-7xl min-h-[40px] max-h-[300px] input input-bordered input-primary resize-none overflow-hidden"
-                            onChange={(e) => setPostContent(e.target.value)}
+                            className={`flex-grow p-4 max-w-7xl min-h-[40px] max-h-[300px] input input-bordered input-primary resize-none`}
+                            onChange={handlePostContentChange}
                             onKeyDown={handleKeyDown}
                             value={postContent}
                             rows={1}
                         />
-                        <button disabled={postContent == ""} className="btn uppercase btn-primary justify-end">
+                        {showProfileResults && profileResults.length > 0 && (
+                            <div className="absolute top-full left-0 mt-1 w-64 max-h-48 overflow-y-auto bg-base-200 rounded-lg shadow-lg z-50">
+                                {profileResults.map((profile,index) => (
+                                    <div
+                                        key={profile.pubkey + "profilelisting" + index}
+                                        className="p-2 hover:bg-primary hover:text-white cursor-pointer"
+                                        onClick={() => {
+                                            const lastAtIndex = postContent.lastIndexOf("@");
+                                            const newContent = postContent.slice(0, lastAtIndex) + 
+                                                `nostr:${nip19.npubEncode(profile.pubkey)} `;
+                                            setPostContent(newContent);
+                                            setShowProfileResults(false);
+                                            textareaRef.current?.focus();
+                                        }}
+                                    >
+                                        <div className="flex items-center">
+                                            {lookupProfileImg(profile.pubkey)}
+                                            <div className="ml-2">
+                                                <div>{profile.content?.name || summarizePubkey(profile.pubkey)}</div>
+                                                <div className="text-sm opacity-70">{profile.content?.nip05 || ''}</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                        <button
+                            disabled={postContent == ""}
+                            className="btn uppercase btn-primary justify-end"
+                        >
                             Post
                         </button>
-                        {!showKindPicker && (
-                            <button
-                                onClick={(e) => setShowKindPicker(true)}
-                                value={showKind}
-                                key={showKind}
-                                className="btn btn-secondary ml-2"
-                            >
-                                kind: {showKind}
-                            </button>
-                        )}
                     </form>
+                    <button
+                        onClick={(e) => setShowStats(!showStats)}
+                        key="showstats"
+                        className="btn btn-secondary ml-2"
+                    >
+                        STATS
+                    </button>
                 </div>
-                {showKindPicker && (
-                    <div>
-                        <div className="font-condensed items-center justify-center">
-                            Event Kinds (seen) in the last 24 hours
-                        </div>
-                        <div className="flex flex-wrap rounded-sm border-primary border-2 w-full items-center justify-center">
-                            {props.stats != undefined &&
-                                props.stats.map((item: any) => (
-                                    <button
-                                        onClick={(e) => handleChangeKind(e)}
-                                        value={item.kind}
-                                        key={item.kind}
-                                        className="btn btn-secondary"
+                {showStats && (
+                    <div className="w-full">
+                        {relayData && (
+                            <div>
+                                <div className="font-condensed items-center justify-center">
+                                    Connections
+                                </div>
+
+                                <ResponsiveContainer width="100%" height={100}>
+                                    <LineChart
+                                        data={transformConnStats(connStats)}
                                     >
-                                        kind: {item.kind} ({item._value})
-                                    </button>
-                                ))}
+                                        <XAxis
+                                            dataKey="time"
+                                            type="number"
+                                            domain={["dataMin", "dataMax"]}
+                                            tickFormatter={(time) =>
+                                                new Date(
+                                                    time
+                                                ).toLocaleTimeString()
+                                            }
+                                        />
+                                        <YAxis />
+                                        <Tooltip
+                                            labelFormatter={(time) =>
+                                                new Date(time).toLocaleString()
+                                            }
+                                            formatter={(value) => [
+                                                `${value} connections`,
+                                            ]}
+                                        />
+                                        <Line
+                                            type="monotone"
+                                            dataKey="value"
+                                            stroke="#8884d8"
+                                            dot={false}
+                                            name="Active Connections"
+                                        />
+                                    </LineChart>
+                                </ResponsiveContainer>
+                            </div>
+                        )}
+                        <div className="flex">
+                            <input
+                                type="text"
+                                value={kindFilter}
+                                onChange={(e) => setKindFilter(e.target.value)}
+                                placeholder="Enter kind #"
+                                className="mb-4 p-2 ml-2 mr-2 border rounded input input-bordered input-primary"
+                            />
+                            <button
+                                className="btn btn-secondary"
+                                value={kindFilter}
+                                onClick={(e) => handleChangeKind(e)}
+                            >
+                                EXPLORE KIND
+                            </button>
                         </div>
+
+                        {relayData && (
+                            <div>
+                                <div className="font-condensed items-center justify-center mb-2">
+                                    Events (grouped by Kind) in the last 24
+                                    hours
+                                </div>
+                                <div className="flex">
+                                    <label className="label cursor-pointer">
+                                        <span className="label-text mr-2">
+                                            {isAllowedStats
+                                                ? "Filter: Allowed Events"
+                                                : "Filter: Blocked Events"}
+                                        </span>
+                                        <input
+                                            type="checkbox"
+                                            className="toggle toggle-primary"
+                                            checked={isAllowedStats}
+                                            onChange={(e) =>
+                                                setIsAllowedStats(
+                                                    e.target.checked
+                                                )
+                                            }
+                                        />
+                                    </label>
+                                </div>
+                            </div>
+                        )}
+
+                        {relayData && graphStats.length == 0 && (
+                            <span className="loading loading-spinner text-primary w-4 h-4">
+                                loading
+                            </span>
+                        )}
+                        {relayData && graphStats.length != 0 && (
+                            <ResponsiveContainer width="100%" height={200}>
+                                <LineChart>
+                                    <XAxis
+                                        dataKey="time"
+                                        type="number"
+                                        domain={["dataMin", "dataMax"]}
+                                        allowDuplicatedCategory={false}
+                                        tickFormatter={(unixTime) =>
+                                            new Date(
+                                                unixTime
+                                            ).toLocaleTimeString()
+                                        }
+                                    />
+                                    <YAxis />
+                                    <Tooltip
+                                        content={({
+                                            active,
+                                            payload,
+                                            label,
+                                        }) => {
+                                            if (
+                                                active &&
+                                                payload &&
+                                                payload.length
+                                            ) {
+                                                // Sort by value in descending order
+                                                const sortedPayload =
+                                                    payload.sort(
+                                                        (a: any, b: any) =>
+                                                            b.value - a.value
+                                                    );
+
+                                                return (
+                                                    <div className="custom-tooltip bg-base-100 border p-2 rounded-md">
+                                                        <p>
+                                                            {new Date(
+                                                                label
+                                                            ).toLocaleString()}
+                                                        </p>
+                                                        {sortedPayload.map(
+                                                            (entry, index) => (
+                                                                <p
+                                                                    className="font-condensed"
+                                                                    key={
+                                                                        "tooltipx" +
+                                                                        index
+                                                                    }
+                                                                    style={{
+                                                                        color: entry.color,
+                                                                    }}
+                                                                >
+                                                                    {entry.name}
+                                                                    :{" "}
+                                                                    {
+                                                                        entry.value
+                                                                    }{" "}
+                                                                    events
+                                                                </p>
+                                                            )
+                                                        )}
+                                                    </div>
+                                                );
+                                            }
+                                            return null;
+                                        }}
+                                    />
+                                    {transformToMultiSeriesData(graphStats).map(
+                                        (series, index) => (
+                                            <Line
+                                                dot={false}
+                                                key={
+                                                    "seriesnames" + series.name
+                                                }
+                                                data={series.data}
+                                                type="monotone"
+                                                dataKey="value"
+                                                name={series.name}
+                                                stroke={`#${Math.floor(
+                                                    Math.random() * 16777215
+                                                ).toString(16)}`}
+                                            />
+                                        )
+                                    )}
+                                </LineChart>
+                            </ResponsiveContainer>
+                        )}
                     </div>
                 )}
             </div>
@@ -1091,11 +1645,13 @@ export default function PostsPage(
                     <div className="bg-base-100">
                         <dialog
                             key={"my_modal_5" + showPost.id}
-                            className="modal modal-top modal-open sm:modal-middle h-auto"
+                            className="modal modal-open sm:modal-middle h-auto max-h-full overflow-y-auto"
                         >
-                            <form method="dialog" className="modal-box w-full"
-                                        ref={replyFormRef}
-                                        onSubmit={(e) => handleReply(e)}
+                            <form
+                                method="dialog"
+                                className="modal-box w-full"
+                                ref={replyFormRef}
+                                onSubmit={(e) => handleReply(e)}
                             >
                                 <div className="flex justify-end">
                                     <div
@@ -1115,24 +1671,99 @@ export default function PostsPage(
                                     </div>
                                     <div className="chat-header overflow-hidden">
                                         <div className="flex flex-wrap items-center space-x-2">
-                                            <div className="hover:text-white overflow-hidden break-words break-all">
+                                            <div className="hover:text-white overflow-hidden break-normal">
                                                 {summarizePubkey(
                                                     lookupProfileName(
                                                         showPost.pubkey
                                                     )
                                                 )}
                                             </div>
-                                            <time className="text-xs text-notice opacity-80 overflow-hidden break-words break-all">
+                                            <time className="text-xs text-notice opacity-80 overflow-hidden break-all">
                                                 {lookupNip05(showPost.pubkey)}
                                             </time>
                                         </div>
                                     </div>
 
-                                    <div className="chat-bubble text-white selectable h-auto overflow-wrap break-normal whitespace-pre-line">
-                                        {showContentWithoutLinks4(
-                                            showPost.content
+                                    {showPost.kind == 1 && (
+                                        <div className="chat-bubble text-white selectable h-auto break-normal whitespace-pre-line">
+                                            {showContentWithoutLinks4(
+                                                showPost.content
+                                            )}
+                                        </div>
+                                    )}
+                                    {showPost.kind == 20 && (
+                                        <div className="chat-bubble text-white selectable h-auto break-normal whitespace-pre-line">
+                                            <img
+                                                src={getSrcImageFromPost(
+                                                    showPost
+                                                )}
+                                                alt="Kind 20 media"
+                                                className="h-auto overflow-hidden mb-2"
+                                            />
+                                            {showContentWithoutLinks4(
+                                                showPost.content
+                                            )}
+                                        </div>
+                                    )}
+                                    {showPost.kind != 1 &&
+                                        showPost.kind != 20 && (
+                                            <div className="chat-bubble chat-bubble-gray-100 text-white selectable h-auto whitespace-pre-line break-normal">
+                                                <div className="label label-text-sm">
+                                                    content
+                                                </div>
+                                                <div className="border-2 border-gray-300 rounded-lg p-4 whitespace-pre-line break-normal">
+                                                    {showPost.content &&
+                                                        showContentWithoutLinks4(
+                                                            showPost.content
+                                                        )}
+                                                    {!showPost.content &&
+                                                        "no content"}
+                                                </div>
+
+                                                <div className="label label-text-sm">
+                                                    tags
+                                                </div>
+                                                <div className="border-2 border-gray-300 rounded-lg p-4 flex-col-2">
+                                                    {showPost.tags.map(
+                                                        (
+                                                            tag: any,
+                                                            index: number
+                                                        ) => (
+                                                            <div
+                                                                className="flex"
+                                                                key={
+                                                                    showPost.id +
+                                                                    "outertag" +
+                                                                    index
+                                                                }
+                                                            >
+                                                                {tag.map(
+                                                                    (
+                                                                        tval: any,
+                                                                        i: number
+                                                                    ) => (
+                                                                        <div
+                                                                            className="border-2 border-primary p-2 overflow-x-auto"
+                                                                            key={
+                                                                                showPost.id +
+                                                                                "innertag" +
+                                                                                tval +
+                                                                                i
+                                                                            }
+                                                                        >
+                                                                            {
+                                                                                tval
+                                                                            }
+                                                                        </div>
+                                                                    )
+                                                                )}
+                                                            </div>
+                                                        )
+                                                    )}
+                                                </div>
+                                            </div>
                                         )}
-                                    </div>
+
                                     <div className="chat-footer opacity-50">
                                         {showLocalTime(showPost.created_at)}
                                     </div>
@@ -1183,25 +1814,24 @@ export default function PostsPage(
                                 )}
 
                                 <div className="flex flex-wrap items-center justify-center mb-4 mt-2">
-                                        <textarea
-                                            ref={textareaReplyRef}
-                                            key="replypost"
-                                            placeholder="send reply"
-                                            className="flex-grow p-4 max-w-7xl min-h-[40px] max-h-[300px] input input-bordered input-primary resize-none overflow-hidden"
-                                            onChange={(e) =>
-                                                setReplyPost(e.target.value)
-                                            }
-                                            onKeyDown={handleKeyDownReply}
-                                            value={replyPost}
-                                            rows={1}
-                                        />
-                                        <button
-                                            className="btn uppercase btn-primary"
-                                            onClick={(e) => handleReply(e)}
-                                            disabled={replyPost == ""}
-                                        >
-                                            reply
-                                        </button>
+                                    <textarea
+                                        ref={replyTextAreaRef}
+                                        key="replypost"
+                                        placeholder="send reply"
+                                        className={`flex-grow p-4 max-w-7xl min-h-[40px] max-h-[300px] input input-bordered input-primary resize-none`}
+                                        onChange={(e) => setReplyPost(e.target.value)}
+                                        onKeyDown={handleKeyDownReply}
+                                        onFocus={handleTextAreaFocus}
+                                        value={replyPost}
+                                        rows={1}
+                                    />
+                                    <button
+                                        className="btn uppercase btn-primary"
+                                        onClick={(e) => handleReply(e)}
+                                        disabled={replyPost == ""}
+                                    >
+                                        reply
+                                    </button>
                                 </div>
 
                                 {modActions && (
@@ -1286,13 +1916,26 @@ export default function PostsPage(
                                     {showContentWithoutLinks4(post.content)}
                                 </div>
                             )}
-                            {post.kind != 1 && (
+                            {post.kind == 20 && (
+                                <div className="chat-bubble text-white selectable h-auto break-normal whitespace-pre-line">
+                                    <img
+                                        src={getSrcImageFromPost(post)}
+                                        alt="Kind 20 media"
+                                        className="h-auto overflow-hidden mb-2"
+                                    />
+                                    {showContentWithoutLinks4(post.content)}
+                                </div>
+                            )}
+                            {post.kind != 1 && post.kind != 20 && (
                                 <div className="chat-bubble chat-bubble-gray-100 text-white selectable h-auto whitespace-pre-line break-normal">
                                     <div className="label label-text-sm">
                                         content
                                     </div>
                                     <div className="border-2 border-gray-300 rounded-lg p-4 whitespace-pre-line break-normal">
-                                        {post.content && post.content}
+                                        {post.content &&
+                                            showContentWithoutLinks4(
+                                                post.content
+                                            )}
                                         {!post.content && "no content"}
                                     </div>
 
@@ -1302,7 +1945,10 @@ export default function PostsPage(
                                     <div className="border-2 border-gray-300 rounded-lg p-4 flex-col-2">
                                         {post.tags.map(
                                             (tag: any, index: number) => (
-                                                <div className="flex">
+                                                <div
+                                                    className="flex"
+                                                    key={"outertag" + index}
+                                                >
                                                     {tag.map(
                                                         (
                                                             tval: any,
@@ -1310,7 +1956,11 @@ export default function PostsPage(
                                                         ) => (
                                                             <div
                                                                 className="border-2 border-primary p-2 overflow-x-auto"
-                                                                key={tval + i}
+                                                                key={
+                                                                    "innertag" +
+                                                                    tval +
+                                                                    i
+                                                                }
                                                             >
                                                                 {tval}
                                                             </div>

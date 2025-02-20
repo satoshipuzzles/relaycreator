@@ -1,8 +1,9 @@
 import { getServerSession } from "next-auth/next"
 import authOptions from "../../pages/api/auth/[...nextauth]"
 import prisma from '../../lib/prisma'
-import Settings from "./settings"
 import Wizard from "./wizard"
+import { ToastContainer } from 'react-toastify'
+
 
 export default async function Curator({
     params,
@@ -15,9 +16,9 @@ export default async function Curator({
 
     if (!session || !(session as any).user.name) {
         return (
-            <>
-                <div></div>
-            </>
+            <article className="prose">
+                <h1>Your relay is being created.  Please Sign-in to manage your relay.</h1>
+            </article>
         )
     }
 
@@ -43,6 +44,16 @@ export default async function Curator({
         },
         include: {
             owner: true,
+            streams: {
+                select: {
+                    id: true,
+                    url: true,
+                    direction: true,
+                    internal: true,
+                    sync: true,
+                    status: true,
+                },
+            },
             moderators: {
                 include: { user: true },
             },
@@ -84,6 +95,9 @@ export default async function Curator({
     }
 
     return (
-        <Wizard relay={relay} />
+        <div>
+            <ToastContainer/>
+            <Wizard relay={relay} />
+        </div>
     )
 }

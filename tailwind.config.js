@@ -21,8 +21,9 @@ module.exports = {
         jetbrains: ["var(--font-jetbrains)"],
         sans: ["var(--font-open-sans)"],
         mono: ["var(--font-roboto-mono)"],
+        roboto: ["var(--font-roboto)"],
         condensed: ["var(--font-roboto-condensed)"],
-      }
+      },
     },
     fontSize: {
         base: '1.25rem', // 20px
@@ -73,6 +74,7 @@ module.exports = {
           "accent": "#EB4DFF",
           "neutral": "#1E293B",
           "base-100": "#0F172A",
+          //"base-100": "#141641",
           "info": "#B9E0FF",
           //"success": "#FF007c",
           "warning": "#F4BF50",

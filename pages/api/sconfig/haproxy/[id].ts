@@ -117,7 +117,7 @@ export default async function handle(req: any, res: any) {
         backend preview 
             mode  		        http
             option 		        redispatch
-            balance 	        source
+            balance 	        roundrobin
             option forwardfor except 127.0.0.1 header x-real-ip
             server     websocket-001 127.0.0.1:${process.env.NEXT_PUBLIC_PREVIEW_PORT} maxconn 50000 weight 10 check 
         `
@@ -191,7 +191,7 @@ export default async function handle(req: any, res: any) {
 backend ${element.name}
 	mode  		        http
 	option 		        redispatch
-	balance 	        source
+	balance 	        roundrobin
 	option forwardfor except 127.0.0.1 header x-real-ip`
 
     if(element.auth_required) {
@@ -230,7 +230,7 @@ backend ${element.name}
 backend ${element.name}
 	mode  		        http
 	option 		        redispatch
-	balance 	        source
+	balance 	        roundrobin
 	option forwardfor except 127.0.0.1 header x-real-ip
 	server     ${element.name} ${element.ip}:${element.port} ${useSSLVerify} maxconn 50000 weight 10 check
 	`
@@ -241,7 +241,7 @@ backend ${element.name}
     let deleted_domains = ``
     fetchDeletedDomains.forEach((element, counter) => {
         deleted_domains = deleted_domains + `
-        http-request deny if { hdr(Host) -i ${element.name}.${element.domain} }
+        http-request return content-type text/html status 410 file /etc/haproxy/static/410.http if { hdr(Host) -i ${element.name}.${element.domain} }
         `
     })
 
@@ -271,16 +271,17 @@ global
 	ssl-default-bind-ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384
 	ssl-default-bind-ciphersuites TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256
 	ssl-default-bind-options ssl-min-ver TLSv1.2 no-tls-tickets
+    hard-stop-after 120s
 
 defaults
 	log	global
 	mode	http
 	option	httplog
 	option	dontlognull
-    timeout connect 5s
-    timeout client  25s
-    timeout server  25s
-	timeout tunnel 600s
+    timeout connect 20s
+    timeout client  20s
+    timeout server  60s
+	timeout tunnel 300s
 	#timeout http-keep-alive 1s
 	#timeout http-request 15s
 	#timeout queue 30s
@@ -332,7 +333,7 @@ frontend secured
 backend main
 	mode  		        http
 	option 		        redispatch
-	balance 	        source
+	balance 	        roundrobin
 	option forwardfor except 127.0.0.1 header x-real-ip
     ${app_servers_cfg}
 
